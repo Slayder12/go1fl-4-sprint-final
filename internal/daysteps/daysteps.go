@@ -18,8 +18,8 @@ const (
 	mInKm = 1000
 )
 
+// parsePackage разбирает строку данных на количество шагов и продолжительность активности.
 func parsePackage(data string) (int, time.Duration, error) {
-
 	splitData := strings.Split(data, ",")
 	if len(splitData) != 2 {
 		return 0, 0, errors.New("неправильное количество параметров")
@@ -39,16 +39,19 @@ func parsePackage(data string) (int, time.Duration, error) {
 		return 0, 0, err
 	}
 
+	if duration <= 0 {
+		return 0, 0, errors.New("неверная продолжительность - ноль")
+	}
+
 	return steps, duration, nil
 }
 
 func DayActionInfo(data string, weight, height float64) string {
-
-	if !spentcalories.ValidateWeight(weight) {
+	if !spentcalories.CheckWeight(weight) {
 		fmt.Println("неверное значение веса", weight)
 		return ""
 	}
-	if !spentcalories.ValidateHeight(height) {
+	if !spentcalories.CheckHeight(height) {
 		fmt.Println("неверное значение роста", height)
 		return ""
 	}
@@ -69,7 +72,7 @@ func DayActionInfo(data string, weight, height float64) string {
 	}
 
 	dayActionInfo := fmt.Sprintf(
-		"Количество шагов: %d.\nДистанция составила %.2f км.\nВы сожгли %.2f ккал.",
+		"Количество шагов: %d.\nДистанция составила %.2f км.\nВы сожгли %.2f ккал.\n",
 		steps, distance, calories,
 	)
 

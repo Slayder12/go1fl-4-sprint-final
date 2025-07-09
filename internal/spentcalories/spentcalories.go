@@ -23,8 +23,11 @@ const (
 	maxHeight = 2.75  // Максимальный допустимый рост (м)
 )
 
+// parseTraining разбирает строку с данными о тренировке
+// Формат данных: "steps,activityType,duration" (например: "5000,Бег,1h30m")
 func parseTraining(data string) (int, string, time.Duration, error) {
 	splitData := strings.Split(data, ",")
+
 	if len(splitData) != 3 {
 		return 0, "", 0, errors.New("неправильное количество параметров")
 	}
@@ -43,17 +46,16 @@ func parseTraining(data string) (int, string, time.Duration, error) {
 		return 0, "", 0, err
 	}
 
-	if duration == 0 {
-		fmt.Println("неверная продолжительность - ноль")
-		return 0, "", 0, err
+	if duration <= 0 {
+		return 0, "", 0, errors.New("неверная продолжительность - ноль")
 	}
 
 	return steps, splitData[1], duration, nil
 }
 
+// distance рассчитывает пройденную дистанцию в километрах
 func distance(steps int, height float64) float64 {
-
-	if !ValidateHeight(height) {
+	if !CheckHeight(height) {
 		fmt.Println("неверное значение роста:", height)
 		return 0
 	}
@@ -68,8 +70,8 @@ func distance(steps int, height float64) float64 {
 	return distance
 }
 
+// meanSpeed рассчитывает среднюю скорость в км/ч
 func meanSpeed(steps int, height float64, duration time.Duration) float64 {
-
 	if duration <= 0 {
 		fmt.Println("неверное значение продолжительности:", duration)
 		return 0
@@ -81,17 +83,17 @@ func meanSpeed(steps int, height float64, duration time.Duration) float64 {
 	return speed
 }
 
+// TrainingInfo формирует отчет о тренировке
 func TrainingInfo(data string, weight, height float64) (string, error) {
-
-	if !ValidateWeight(weight) {
+	if !CheckWeight(weight) {
 		return "", errors.New("неверное значение веса")
 	}
 
-	if !ValidateHeight(height) {
+	if !CheckHeight(height) {
 		return "", errors.New("неверное значение роста")
 	}
 
-	steps, typeActivity, duration, err := parseTraining(data)
+	steps, activityType, duration, err := parseTraining(data)
 
 	if err != nil {
 		log.Println(err)
@@ -99,50 +101,27 @@ func TrainingInfo(data string, weight, height float64) (string, error) {
 	}
 
 	distance := distance(steps, height)
-	meanSpeed := meanSpeed(steps, height, duration)
+	speed := meanSpeed(steps, height, duration)
 
-	var caloriesBurned float64
-
-	switch typeActivity {
-	case "Бег":
-		caloriesBurned, err = RunningSpentCalories(steps, weight, height, duration)
-		if err != nil {
-			log.Println(err)
-			return "", err
-		}
-	case "Ходьба":
-		caloriesBurned, err = WalkingSpentCalories(steps, weight, height, duration)
-		if err != nil {
-			log.Println(err)
-			return "", err
-		}
-	default:
-		return "", errors.New("неизвестный тип тренировки")
+	caloriesBurned, err := calculateCalories(activityType, steps, weight, height, duration)
+	if err != nil {
+		return "", fmt.Errorf("ошибка расчета калорий: %w", err)
 	}
 
-	trainingInfo := fmt.Sprintf(
-		"Тип тренировки: %s\n"+
-		"Длительность: %.2f ч.\n"+
-		"Дистанция: %.2f км.\n"+
-		"Скорость: %.2f км/ч\n"+
-		"Сожгли калорий: %.2f",
-		typeActivity, duration.Hours(), distance, meanSpeed, caloriesBurned,
-	)
-
-	return trainingInfo, nil
+	return formatTrainingInfo(activityType, duration, distance, speed, caloriesBurned), nil
 }
 
+// RunningSpentCalories рассчитывает количество потраченных калорий при беге
 func RunningSpentCalories(steps int, weight, height float64, duration time.Duration) (float64, error) {
-
 	if steps <= 0 {
 		return 0, errors.New("неверное значение шагов")
 	}
 
-	if !ValidateWeight(weight) {
+	if !CheckWeight(weight) {
 		return 0, errors.New("неверное значение веса")
 	}
 
-	if !ValidateHeight(height) {
+	if !CheckHeight(height) {
 		return 0, errors.New("неверное значение роста")
 	}
 
@@ -156,8 +135,9 @@ func RunningSpentCalories(steps int, weight, height float64, duration time.Durat
 	return caloriesBurned, nil
 }
 
+// WalkingSpentCalories рассчитывает количество потраченных калорий при ходьбе
+// Использует RunningSpentCalories с понижающим коэффициентом
 func WalkingSpentCalories(steps int, weight, height float64, duration time.Duration) (float64, error) {
-
 	caloriesBurned, err := RunningSpentCalories(steps, weight, height, duration)
 
 	if err != nil {
@@ -169,9 +149,8 @@ func WalkingSpentCalories(steps int, weight, height float64, duration time.Durat
 	return walkingCalories, nil
 }
 
-// Функция проверки веса (в килограммах)
-func ValidateWeight(weight float64) bool {
-
+// CheckWeight проверяет корректность веса
+func CheckWeight(weight float64) bool {
 	if weight < minWeight {
 		return false
 	}
@@ -181,15 +160,37 @@ func ValidateWeight(weight float64) bool {
 	return true
 }
 
-// Функция проверки роста (в метрах)
-func ValidateHeight(height float64) bool {
-
+// CheckHeight проверяет корректность роста
+func CheckHeight(height float64) bool {
 	if height < minHeight {
 		return false
 	}
 	if height > maxHeight {
 		return false
 	}
-
 	return true
+}
+
+// calculateCalories рассчитывает количество потраченных калорий в зависимости от типа активности.
+func calculateCalories(activityType string, steps int, weight, height float64, duration time.Duration) (float64, error) {
+	switch activityType {
+	case "Бег":
+		return RunningSpentCalories(steps, weight, height, duration)
+	case "Ходьба":
+		return WalkingSpentCalories(steps, weight, height, duration)
+	default:
+		return 0, errors.New("неизвестный тип тренировки")
+	}
+}
+
+// formatTrainingInfo форматирует информацию о тренировке в читаемую строку.
+func formatTrainingInfo(activityType string, duration time.Duration, distance, speed, calories float64) string {
+	return fmt.Sprintf(
+		"Тип тренировки: %s\n"+
+			"Длительность: %.2f ч.\n"+
+			"Дистанция: %.2f км.\n"+
+			"Скорость: %.2f км/ч\n"+
+			"Сожгли калорий: %.2f\n",
+		activityType, duration.Hours(), distance, speed, calories,
+	)
 }
